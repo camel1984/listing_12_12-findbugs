@@ -1,6 +1,12 @@
 buildscript {
     repositories {
-        mavenCentral()
+        maven {
+            url "https://repo1.maven.org/maven2/"
+        }
+
+        maven {
+            url "https://repo.spring.io/plugins-release/"
+        }
     }
 
     dependencies {
@@ -8,25 +14,8 @@ buildscript {
     }
 }
 
-ext.h2TcpPort = PortFinder.findFreePort()
-ext.h2StartupBlockMs = 2000
 
-task startDatabase(type: H2DatabaseStarter) {
-    group = 'database'
-    description = 'Starts database.'
-    tcpPort = h2TcpPort
-    blockMs = h2StartupBlockMs
-}
-
-task stopDatabase(type: JavaExec) {
-    group = 'database'
-    description = 'Stops database.'
-    classpath = buildscript.configurations.classpath
-    main = 'org.h2.tools.Server'
-    args = ['-tcpShutdown', "tcp://localhost:${h2TcpPort}"]
-}
-
-task buildSchema(type: JavaExec, dependsOn: startDatabase) {
+task buildSchema(type: JavaExec) {
     group = 'database'
     description = 'Builds database schema.'
     classpath = buildscript.configurations.classpath
@@ -36,65 +25,3 @@ task buildSchema(type: JavaExec, dependsOn: startDatabase) {
 }
 
 task startAndPrepareDatabase(dependsOn: buildSchema)
-
-class H2DatabaseStarter extends DefaultTask {
-    @Input
-    Integer tcpPort
-
-    @Input
-    Integer blockMs
-
-    @TaskAction
-    void start() {
-        new Thread(new H2Server(tcpPort)).start()
-        Thread.sleep(blockMs)
-    }
-
-    private class H2Server implements Runnable {
-        final Integer tcpPort
-
-        H2Server(Integer tcpPort) {
-            this.tcpPort = tcpPort
-        }
-
-        @Override
-        void run() {
-            org.h2.tools.Server.main('-tcp', '-tcpPort', tcpPort.toString())
-        }
-    }
-}
-
-class PortFinder {
-    static final int MIN_PORT_NUMBER = 1024
-    static final int MAX_PORT_NUMBER = 49151
-
-    static int findFreePort() {
-        for (i in MIN_PORT_NUMBER..MAX_PORT_NUMBER) {
-            if (available(i)) {
-                return i
-            }
-
-            throw new RuntimeException("Could not find an available port between $MIN_PORT_NUMBER and $MAX_PORT_NUMBER")
-        }
-    }
-
-    private static boolean available(final int port) {
-        ServerSocket serverSocket = null
-        DatagramSocket dataSocket = null
-
-        try {
-            serverSocket = new ServerSocket(port)
-            serverSocket.reuseAddress = true
-            dataSocket = new DatagramSocket(port)
-            dataSocket.reuseAddress = true
-            return true
-        }
-        catch (IOException e) {
-            return false
-        }
-        finally {
-            dataSocket?.close()
-            serverSocket?.close()
-        }
-    }
-}
